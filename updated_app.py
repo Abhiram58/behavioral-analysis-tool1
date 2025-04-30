@@ -53,7 +53,7 @@ def visualize_normality(data, title):
     plt.tight_layout()
     return fig
 
-def display_results(results):
+def display_results(results, effect_size_label, effect_size_value ):
     st.write("### Raw Results")
     st.code(results["raw"])
     st.write("### APA-Style Results")
@@ -62,13 +62,26 @@ def display_results(results):
     st.write(results["feedback"])
     st.write("### Intervention Effect")
     st.write(results["effect"])
-    if "pnd" in results:
-        st.write(f"### Percent Non-Overlap (PND): {results['pnd']:.1f}%")
+    st.write(f"### {effect_size_label} Value: {effect_size_value:.1f}%")
 
 def compute_pnd(baseline, intervention):
     max_baseline = np.max(baseline)
     non_overlapping = np.sum(intervention >= max_baseline)
     return (non_overlapping / len(intervention)) * 100
+
+def compute_pem(baseline, intervention):
+    median_baseline = np.median(baseline)
+    improved = np.sum(intervention > median_baseline)
+    return (improved / len(intervention)) * 100
+
+def compute_ird(baseline, intervention):
+    baseline_fail = np.sum(baseline >= np.min(intervention))
+    intervention_success = np.sum(intervention > np.max(baseline))
+    n_baseline = len(baseline)
+    n_intervention = len(intervention)
+    if n_baseline + n_intervention == 0:
+        return np.nan
+    return ((intervention_success / n_intervention) - (baseline_fail / n_baseline)) * 100
 
 def show_descriptive_statistics(data, label=""):
     st.write(f"### Descriptive Statistics {f'for {label}' if label else ''}")
@@ -119,10 +132,13 @@ def run_mixed_model(data):
         return model
     return None
 
+# --- Sidebar ---
+effect_size_method = st.sidebar.selectbox("Select Effect Size Measure", ["PND", "PEM", "IRD"])
+
 with tabs[0]:
     if uploaded_file:
         sheet_names = pd.ExcelFile(uploaded_file).sheet_names
-        selected_sheet = st.sidebar.selectbox("Select the sheet", sheet_names)
+        selected_sheet = st.sidebar.selectbox("Select Sheet", sheet_names)
         data = pd.read_excel(uploaded_file, sheet_name=selected_sheet)
         st.write("### Data Preview")
         st.dataframe(data.head())
@@ -136,6 +152,15 @@ with tabs[0]:
                 min_len = min(len(p) for p in trimmed_data)
                 trimmed_data = [p[:min_len] for p in trimmed_data]
                 normality = [check_normality(p) for p in trimmed_data]
+                baseline, intervention = trimmed_data[0], trimmed_data[1]
+
+            
+                if effect_size_method == "PND":
+                    effect = compute_pnd(baseline, intervention)
+                elif effect_size_method == "PEM":
+                    effect = compute_pem(baseline, intervention)
+                else:
+                    effect = compute_ird(baseline, intervention)
 
                 st.write("### Normality Checks")
                 for name, norm, values in zip(phases, normality, trimmed_data):
@@ -153,34 +178,21 @@ with tabs[0]:
                 if method == "Paired t-test":
                     stat, p_value = ttest_rel(baseline, intervention)
                     df = len(baseline) - 1
-                    show_descriptive_statistics(baseline, "Baseline")
-                    show_descriptive_statistics(intervention, "Intervention")
-
-                    results = {
-                        "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
-                        "apa": f"t({df}) = {stat:.2f}, p = {p_value:.3f}",
-                        "feedback": "Paired t-test compares two related samples.",
-                        "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                        "pnd": compute_pnd(baseline, intervention)
-                        
-                    
-
-                    }
-                    display_results(results)
+                    results = {"raw": f"t-test Statistic: {stat:.3f}, p = {p_value:.3f}",
+                               "apa": f"t({len(baseline)-1}) = {stat:.2f}, p = {p_value:.3f}",
+                               "feedback": "Compares paired samples.",
+                               "effect": "Significant" if p_value < 0.05 else "Not Significant"}
+                    display_results(results, effect_size_method, effect)
 
                 elif method == "Wilcoxon Signed-Rank Test":
                     stat, p_value = wilcoxon(baseline, intervention)
                     show_descriptive_statistics(baseline, "Baseline")
                     show_descriptive_statistics(intervention, "Intervention")
-
-                    results = {
-                        "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
-                        "apa": f"Wilcoxon W = {stat:.2f}, p = {p_value:.3f}",
-                        "feedback": "Non-parametric test for two related samples.",
-                        "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                        "pnd": compute_pnd(baseline, intervention)
-                    }
-                    display_results(results)
+                    results = {"raw": f"Wilcoxon Statistic: {stat:.3f}, p = {p_value:.3f}",
+                               "apa": f"Wilcoxon W = {stat:.2f}, p = {p_value:.3f}",
+                               "feedback": "Non-parametric for paired samples.",
+                               "effect": "Significant" if p_value < 0.05 else "Not Significant"}
+                    display_results(results, effect_size_method, effect)
 
                 elif method == "Randomization Test":
                     diffs = []
@@ -188,67 +200,64 @@ with tabs[0]:
                     combined = np.concatenate([baseline, intervention])
                     show_descriptive_statistics(baseline, "Baseline")
                     show_descriptive_statistics(intervention, "Intervention")
-
                     for _ in range(1000):
                         np.random.shuffle(combined)
                         new_baseline = combined[:len(baseline)]
                         new_intervention = combined[len(baseline):]
                         diffs.append(np.mean(new_intervention) - np.mean(new_baseline))
-                    p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
-                    results = {
-                        "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
-                        "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
-                        "feedback": "Randomization test based on shuffled labels.",
-                        "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                        "pnd": compute_pnd(baseline, intervention)
-                    }
-                    display_results(results)
+                        p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
+                        results = {"raw": f"Observed Diff: {observed_diff:.3f}, p = {p_value:.3f}",
+                                   "apa": f"Randomization Diff = {observed_diff:.2f}, p = {p_value:.3f}",
+                                   "feedback": "Label-shuffling nonparametric test.",
+                                   "effect": "Significant" if p_value < 0.05 else "Not Significant"}
+                        display_results(results, effect_size_method, effect)
 
                 elif method == "Bayesian Analysis":
                     posterior_mean, fig = bayesian_logistic_regression(baseline, intervention)
                     st.pyplot(fig)
                     show_descriptive_statistics(baseline, "Baseline")
                     show_descriptive_statistics(intervention, "Intervention")
-
-                    results = {
-                        "raw": f"Posterior Mean: {posterior_mean:.3f}",
-                        "apa": f"Bayesian Estimate = {posterior_mean:.3f}",
-                        "feedback": "Estimates probability of intervention success.",
-                        "effect": f"Bayesian analysis suggests {posterior_mean:.2%} probability of effectiveness.",
-                        "pnd": compute_pnd(baseline, intervention)
-                    }
-                    display_results(results)
+                    results = {"raw": f"Posterior Mean: {posterior_mean:.3f}",
+                               "apa": f"Bayesian Posterior = {posterior_mean:.3f}",
+                               "feedback": "Estimates probability of improvement.",
+                               "effect": f"{posterior_mean:.2%} probability of effectiveness."}
+                    display_results(results, effect_size_method, effect)
 
                 elif method == "Friedman Test":
                     stat, p_value = friedmanchisquare(*trimmed_data)
                     show_descriptive_statistics(baseline, "Baseline")
                     show_descriptive_statistics(intervention, "Intervention")
+                    results = {"raw": f"Statistic = {stat:.3f}, p = {p_value:.3f}",
+                               "apa": f"Friedman X^2 = {stat:.2f}, p = {p_value:.3f}",
+                               "feedback": "Compares >2 related phases.",
+                               "effect": "Significant" if p_value < 0.05 else "Not Significant"}
+                    display_results(results, effect_size_method, effect)
 
-                    results = {
-                        "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
-                        "apa": f"Friedman χ² = {stat:.2f}, p = {p_value:.3f}",
-                        "feedback": "Compares more than two related phases.",
-                        "effect": "Significant differences." if p_value < 0.05 else "No significant difference."
-                    }
-                    display_results(results)
-
-        elif analysis_type == "Alternating Treatment":
+        if analysis_type == "Alternating Treatment":
             condition_col = st.sidebar.selectbox("Select Condition Column", data.columns)
             value_col = st.sidebar.selectbox("Select Value Column", [col for col in data.columns if col != condition_col])
             at_data = data[[condition_col, value_col]].dropna()
             groups = at_data[condition_col].unique()
-            st.write("### Conditions Detected:", list(groups))
+            g1 = at_data[at_data[condition_col] == groups[0]][value_col]
+            g2 = at_data[at_data[condition_col] == groups[1]][value_col]
 
-            # Show Descriptive Statistics
+            if effect_size_method == "PND":
+                effect = compute_pnd(g1, g2)
+            elif effect_size_method == "PEM":
+                effect = compute_pem(g1, g2)
+            else:
+                effect = compute_ird(g1, g2)
+
+        # Show Descriptive Statistics
             for g in groups:
                 show_descriptive_statistics(at_data[at_data[condition_col] == g][value_col], str(g))
-            
+
             for g in groups:
                 group_data = at_data[at_data[condition_col] == g][value_col]
-                fig = visualize_normality(group_data, str(g))
-                st.pyplot(fig)
+            fig = visualize_normality(group_data, str(g))
+            st.pyplot(fig)
 
-            # Choose method based on group count
+        # Choose method based on group count
             if len(groups) == 2:
                 at_methods = ["Independent t-test", "Mann-Whitney U Test", "Randomization Test", "Bayesian Analysis"]
             else:
@@ -265,7 +274,7 @@ with tabs[0]:
                     "feedback": "Non-parametric test comparing multiple groups.",
                     "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
                 }
-                display_results(results)
+                display_results(results, effect_size_method, effect)
 
             elif at_method == "ANOVA":
                 stat, p_value = stats.f_oneway(*group_values)
@@ -275,17 +284,20 @@ with tabs[0]:
                     "feedback": "Parametric ANOVA comparing multiple groups.",
                     "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
                 }
-                display_results(results)
+                display_results(results, effect_size_method, effect)
+
+
+        
 
             elif at_method == "Randomization Test":
-                if len(groups) != 2:
-                    st.warning("Randomization Test currently supports only two groups.")
-                else:
-                    g1 = at_data[at_data[condition_col] == groups[0]][value_col].values
-                    g2 = at_data[at_data[condition_col] == groups[1]][value_col].values
-                    observed_diff = np.mean(g2) - np.mean(g1)
-                    combined = np.concatenate([g1, g2])
-                    diffs = []
+                    if len(groups) != 2:
+                        st.warning("Randomization Test currently supports only two groups.")
+                    else:
+                        g1 = at_data[at_data[condition_col] == groups[0]][value_col].values
+                        g2 = at_data[at_data[condition_col] == groups[1]][value_col].values
+                        observed_diff = np.mean(g2) - np.mean(g1)
+                        combined = np.concatenate([g1, g2])
+                        diffs = []
                     for _ in range(1000):
                         np.random.shuffle(combined)
                         new_g1 = combined[:len(g1)]
@@ -298,7 +310,7 @@ with tabs[0]:
                         "feedback": "Randomization test between two groups.",
                         "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
                     }
-                    display_results(results)
+                    display_results(results, effect_size_method, effect)
 
             elif at_method == "Bayesian Analysis":
                 g1 = group_values[0]
@@ -313,49 +325,99 @@ with tabs[0]:
                     "effect": f"Bayesian analysis suggests {posterior_mean:.2%} probability of effectiveness.",
                     "pnd": compute_pnd(g1, g2)
                 }
-                display_results(results)
+                display_results(results, effect_size_method, effect)
 
-
-        elif analysis_type == "Multiple Baseline":
+        if analysis_type == "Multiple Baseline":
             subject_col = st.sidebar.selectbox("Select Subject Column", data.columns)
-            value_col = st.sidebar.selectbox("Select Measurement Column", [c for c in data.columns if c != subject_col])
-            phase_col = st.sidebar.selectbox("Select Phase Column", [c for c in data.columns if c not in [subject_col, value_col]])
-
-            filtered = data[[subject_col, value_col, phase_col]].dropna()
-            last5 = filtered.groupby([subject_col, phase_col]).tail(5)  # Last 5 per subject-phase
+            phase_col = st.sidebar.selectbox("Select Phase Column", [c for c in data.columns if c != subject_col])
+            value_col = st.sidebar.selectbox("Select Measurement Column", [c for c in data.columns if c not in [subject_col, phase_col]])
+            filtered = data[[subject_col, phase_col, value_col]].dropna()
+            last5 = filtered.groupby([subject_col, phase_col]).tail(5)
             pivoted = last5.pivot_table(index=subject_col, columns=phase_col, values=value_col)
-            st.dataframe(pivoted)
+       
 
+            if pivoted.shape[1] >= 2:
+            
+                baseline = pivoted.iloc[:, 0].dropna()
+                intervention = pivoted.iloc[:, 1].dropna()
+            
+
+            
+                show_descriptive_statistics(baseline, "Baseline")
+                show_descriptive_statistics(intervention, "Intervention")
+            else:
+                st.warning("Not enough phases to compute PND. Please check the uploaded data.")
+
+      
+
+            if effect_size_method == "PND":
+                effect = compute_pnd(baseline, intervention)
+            elif effect_size_method == "PEM":
+                effect = compute_pem(baseline, intervention)
+            else:
+                effect = compute_ird(baseline, intervention)
+
+        
             st.write("#### Statistical Options")
             available_methods = ["Paired t-test", "Wilcoxon Signed-Rank Test", "Randomization Test", "Bayesian Analysis"]
             method = st.selectbox("Select Statistical Method", available_methods)
             if pivoted.shape[1] < 2:
-               st.error("❌ Cannot proceed: Less than 2 phase columns found after pivoting. Please make sure both Baseline and Intervention columns are selected.")
-               st.stop()
-            baseline = pivoted.iloc[:, 0].dropna()
-            intervention = pivoted.iloc[:, 1].dropna()
-            show_descriptive_statistics(baseline, "Baseline")
-            show_descriptive_statistics(intervention, "Intervention")
+                st.error("❌ Cannot proceed: Less than 2 phase columns found after pivoting. Please make sure both Baseline and Intervention columns are selected.")
+                st.stop()
 
-      
-            if method == "Randomization Test":
+            if method == "Paired t-test":
+                stat, p_value = ttest_rel(baseline, intervention)
+                df = len(baseline) - 1
+                results = {
+                    "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
+                    "apa": f"t({df}) = {stat:.2f}, p = {p_value:.3f}",
+                    "feedback": "Paired t-test compares two related samples.",
+                    "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
+                ###"pnd": compute_pnd(baseline, intervention)
+                } 
+                display_results(results, effect_size_method, effect)
+
+            elif method == "Wilcoxon Signed-Rank Test":
+                if len(baseline) >= 2 and len(intervention) >= 2:
+                    stat, p_value = wilcoxon(baseline, intervention)
+                    results = {
+                        "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
+                        "apa": f"Wilcoxon W = {stat:.2f}, p = {p_value:.3f}",
+                        "feedback": "Non-parametric test for two related samples.",
+                        "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
+                ###"pnd": compute_pnd(baseline, intervention)
+                    }
+                else:
+                    results = {
+                        "raw": "Not enough data to run Wilcoxon test.",
+                        "apa": "Wilcoxon test not computed due to insufficient data (less than 2 observations).", 
+                        "feedback": "Need at least two paired observations in each group.",
+                        "effect": "N/A"
+                }
+                display_results(results, effect_size_method, effect)
+
+            elif method == "Randomization Test":
                 diffs = []
                 observed_diff = np.mean(intervention) - np.mean(baseline)
                 combined = np.concatenate([baseline, intervention])
+            
                 for _ in range(1000):
                     np.random.shuffle(combined)
                     new_baseline = combined[:len(baseline)]
                     new_intervention = combined[len(baseline):]
                     diffs.append(np.mean(new_intervention) - np.mean(new_baseline))
+
                 p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
+                
                 results = {
                     "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
                     "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
                     "feedback": "Randomization test based on shuffled labels.",
                     "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                    "pnd": compute_pnd(baseline, intervention)
+                    ###"pnd": compute_pnd(baseline, intervention)
                 }
-                display_results(results)
+                display_results(results, effect_size_method, effect)
+
 
             elif method == "Bayesian Analysis":
                 posterior_mean, fig = bayesian_logistic_regression(baseline, intervention)
@@ -365,34 +427,9 @@ with tabs[0]:
                     "apa": f"Bayesian Estimate = {posterior_mean:.3f}",
                     "feedback": "Estimates probability of intervention success.",
                     "effect": f"Bayesian analysis suggests {posterior_mean:.2%} probability of effectiveness.",
-                    "pnd": compute_pnd(baseline, intervention)
+                    ###"pnd": compute_pnd(baseline, intervention)
                 }
-                display_results(results)
-
-           
-
-            elif method == "Paired t-test":
-                stat, p_value = ttest_rel(baseline, intervention)
-                df = len(baseline) - 1
-                results = {
-                    "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
-                    "apa": f"t({df}) = {stat:.2f}, p = {p_value:.3f}",
-                    "feedback": "Paired t-test compares two related samples.",
-                    "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                    "pnd": compute_pnd(baseline, intervention)
-                }
-                display_results(results)
-
-            elif method == "Wilcoxon Signed-Rank Test":
-                stat, p_value = wilcoxon(baseline, intervention)
-                results = {
-                    "raw": f"Statistic: {stat:.3f}, P-value: {p_value:.3f}",
-                    "apa": f"Wilcoxon W = {stat:.2f}, p = {p_value:.3f}",
-                    "feedback": "Non-parametric test for two related samples.",
-                    "effect": "Significant effect." if p_value < 0.05 else "No significant effect.",
-                    "pnd": compute_pnd(baseline, intervention)
-                }
-                display_results(results)
+                display_results(results, effect_size_method, effect)
 
 # ✅ Full app logic completed
 
