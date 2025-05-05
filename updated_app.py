@@ -178,6 +178,8 @@ with tabs[0]:
                 if method == "Paired t-test":
                     stat, p_value = ttest_rel(baseline, intervention)
                     df = len(baseline) - 1
+                    show_descriptive_statistics(baseline, "Baseline")
+                    show_descriptive_statistics(intervention, "Intervention")
                     results = {"raw": f"t-test Statistic: {stat:.3f}, p = {p_value:.3f}",
                                "apa": f"t({len(baseline)-1}) = {stat:.2f}, p = {p_value:.3f}",
                                "feedback": "Compares paired samples.",
