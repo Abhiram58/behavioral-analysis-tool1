@@ -152,7 +152,8 @@ with tabs[0]:
                 min_len = min(len(p) for p in trimmed_data)
                 trimmed_data = [p[:min_len] for p in trimmed_data]
                 normality = [check_normality(p) for p in trimmed_data]
-                baseline, intervention = trimmed_data[0], trimmed_data[1]
+                for phase_name, phase_data in zip(phases, trimmed_data):
+                    show_descriptive_statistics(phase_data, phase_name)
 
             
                 if effect_size_method == "PND":
