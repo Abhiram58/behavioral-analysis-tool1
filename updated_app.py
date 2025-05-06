@@ -372,12 +372,7 @@ with tabs[0]:
 
       
 
-            if effect_size_method == "PND":
-                effect = compute_pnd(baseline, intervention)
-            elif effect_size_method == "PEM":
-                effect = compute_pem(baseline, intervention)
-            else:
-                effect = compute_ird(baseline, intervention)
+           
 
         
             st.write("#### Statistical Options")
