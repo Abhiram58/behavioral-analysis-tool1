@@ -164,7 +164,7 @@ with tabs[0]:
                 else:
                     effect = compute_ird(baseline, intervention)
 
-                 for phase, values in zip(phases, trimmed_data):
+                for phase, values in zip(phases, trimmed_data):
                     show_descriptive_statistics(values, label=phase)
 
                 st.write("### Normality Checks")
