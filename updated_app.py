@@ -303,7 +303,7 @@ with tabs[0]:
 
 
         
-
+            
             elif at_method == "Randomization Test":
                     if len(groups) != 2:
                         st.warning("Randomization Test currently supports only two groups.")
@@ -318,14 +318,14 @@ with tabs[0]:
                             new_g1 = combined[:len(g1)]
                             new_g2 = combined[len(g1):]
                             diffs.append(np.mean(new_g2) - np.mean(new_g1))
-                            p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
-                            results = {
-                                "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
-                                "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
-                                "feedback": "Randomization test between two groups.",
-                                "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
-                                }
-                                display_results(results, effect_size_method, effect)
+                        p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
+                        results = {
+                            "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
+                            "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
+                            "feedback": "Randomization test between two groups.",
+                            "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
+                        }
+                        display_results(results, effect_size_method, effect)
 
             elif at_method == "Bayesian Analysis":
                 g1 = group_values[0]
