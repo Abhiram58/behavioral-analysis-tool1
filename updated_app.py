@@ -278,9 +278,13 @@ with tabs[0]:
 
 
             for g in groups:
-                group_data = at_data[at_data[condition_col] == g][value_col]
-                fig = visualize_normality(group_data, str(g))
-                st.pyplot(fig)
+                group_data = at_data[at_data[condition_col] == g][value_col].dropna()
+                if len(group_data) > 1:
+                    fig = visualize_normality(group_data, str(g))
+                    st.pyplot(fig)
+                else:
+                    st.warning(f"Not enough data to plot normality for condition '{g}'")
+
 
         # Choose method based on group count
             if len(groups) == 2:
