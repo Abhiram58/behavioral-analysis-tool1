@@ -285,7 +285,7 @@ with tabs[0]:
         # Choose method based on group count
             if len(groups) == 2:
                 at_methods = ["Independent t-test", "Mann-Whitney U Test", "Randomization Test", "Bayesian Analysis"]
-            else:
+            elif len(groups) > 2:
                 at_methods = ["ANOVA", "Kruskal-Wallis Test"]
             else:
                 st.warning("Not enough conditions to compare.")
