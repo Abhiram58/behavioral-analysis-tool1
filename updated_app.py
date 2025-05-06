@@ -241,7 +241,7 @@ with tabs[0]:
                     display_results(results, effect_size_method, effect)
 
         if analysis_type == "Alternating Treatment":
-            condition_col = st.sidebar.selectbox("Select Condition Column", data.columns)
+            condition_col = st.sidebar.selectbox(
             "🗂️ Select Condition Column (e.g., treatment labels like A/B)",
             options=[col for col in data.columns]
             )
