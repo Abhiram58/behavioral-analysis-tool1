@@ -250,6 +250,12 @@ with tabs[0]:
             "📊 Select Value Column (e.g., measurement scores)",
             options=[col for col in data.columns if col != condition_col]
             )
+
+            # 🚨 Add this check right after selecting the columns
+            if condition_col == value_col:
+                st.error("❌ Condition and Value columns must be different.")
+                st.stop()
+
             value_col = st.sidebar.selectbox("Select Value Column", [col for col in data.columns if col != condition_col])
             at_data = data[[condition_col, value_col]].dropna()
             groups = at_data[condition_col].unique()
@@ -266,17 +272,24 @@ with tabs[0]:
         # Show Descriptive Statistics
             for g in groups:
                 show_descriptive_statistics(at_data[at_data[condition_col] == g][value_col], str(g))
+            # Show overall descriptive stats grouped by condition
+            st.write("### Overall Descriptive Stats by Condition")
+            st.dataframe(at_data.groupby(condition_col)[value_col].describe())
+
 
             for g in groups:
                 group_data = at_data[at_data[condition_col] == g][value_col]
-            fig = visualize_normality(group_data, str(g))
-            st.pyplot(fig)
+                fig = visualize_normality(group_data, str(g))
+                st.pyplot(fig)
 
         # Choose method based on group count
             if len(groups) == 2:
                 at_methods = ["Independent t-test", "Mann-Whitney U Test", "Randomization Test", "Bayesian Analysis"]
             else:
-                at_methods = ["ANOVA", "Kruskal-Wallis Test", "Randomization Test"]
+                at_methods = ["ANOVA", "Kruskal-Wallis Test"]
+            else:
+                st.warning("Not enough conditions to compare.")
+                at_methods = []
 
             at_method = st.sidebar.selectbox("Select Statistical Method", at_methods)
             group_values = [at_data[at_data[condition_col] == g][value_col].values for g in groups]
