@@ -153,6 +153,8 @@ with tabs[0]:
                 trimmed_data = [p[:min_len] for p in trimmed_data]
                 normality = [check_normality(p) for p in trimmed_data]
                 baseline, intervention = trimmed_data[0], trimmed_data[1]
+                baseline_label, intervention_label = phases[0], phases[1]
+
 
             
                 if effect_size_method == "PND":
@@ -161,6 +163,9 @@ with tabs[0]:
                     effect = compute_pem(baseline, intervention)
                 else:
                     effect = compute_ird(baseline, intervention)
+
+                 for phase, values in zip(phases, trimmed_data):
+                    show_descriptive_statistics(values, label=phase)
 
                 st.write("### Normality Checks")
                 for name, norm, values in zip(phases, normality, trimmed_data):
@@ -237,6 +242,14 @@ with tabs[0]:
 
         if analysis_type == "Alternating Treatment":
             condition_col = st.sidebar.selectbox("Select Condition Column", data.columns)
+            "🗂️ Select Condition Column (e.g., treatment labels like A/B)",
+            options=[col for col in data.columns]
+            )
+
+            value_col = st.sidebar.selectbox(
+            "📊 Select Value Column (e.g., measurement scores)",
+            options=[col for col in data.columns if col != condition_col]
+            )
             value_col = st.sidebar.selectbox("Select Value Column", [col for col in data.columns if col != condition_col])
             at_data = data[[condition_col, value_col]].dropna()
             groups = at_data[condition_col].unique()
@@ -300,19 +313,19 @@ with tabs[0]:
                         observed_diff = np.mean(g2) - np.mean(g1)
                         combined = np.concatenate([g1, g2])
                         diffs = []
-                    for _ in range(1000):
-                        np.random.shuffle(combined)
-                        new_g1 = combined[:len(g1)]
-                        new_g2 = combined[len(g1):]
-                        diffs.append(np.mean(new_g2) - np.mean(new_g1))
-                    p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
-                    results = {
-                        "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
-                        "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
-                        "feedback": "Randomization test between two groups.",
-                        "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
-                    }
-                    display_results(results, effect_size_method, effect)
+                        for _ in range(1000):
+                            np.random.shuffle(combined)
+                            new_g1 = combined[:len(g1)]
+                            new_g2 = combined[len(g1):]
+                            diffs.append(np.mean(new_g2) - np.mean(new_g1))
+                            p_value = np.mean(np.abs(diffs) >= np.abs(observed_diff))
+                            results = {
+                                "raw": f"Observed Diff: {observed_diff:.3f}, P-value: {p_value:.3f}",
+                                "apa": f"Randomization Test: diff = {observed_diff:.2f}, p = {p_value:.3f}",
+                                "feedback": "Randomization test between two groups.",
+                                "effect": "Significant difference." if p_value < 0.05 else "No significant difference."
+                                }
+                                display_results(results, effect_size_method, effect)
 
             elif at_method == "Bayesian Analysis":
                 g1 = group_values[0]
@@ -339,9 +352,16 @@ with tabs[0]:
        
 
             if pivoted.shape[1] >= 2:
-            
+                pair_df = pivoted.iloc[:, [0, 1]].dropna()
                 baseline = pivoted.iloc[:, 0].dropna()
                 intervention = pivoted.iloc[:, 1].dropna()
+
+                if effect_size_method == "PND":
+                    effect = compute_pnd(baseline, intervention)
+                elif effect_size_method == "PEM":
+                    effect = compute_pem(baseline, intervention)
+                else:
+                    effect = compute_ird(baseline, intervention)
             
 
             
